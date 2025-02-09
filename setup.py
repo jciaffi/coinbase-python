@@ -9,7 +9,7 @@ REQUIREMENTS = [
                                                'requirements.txt')).readlines()]
 
 setup(
-    name='coinbase',
+    name='coinbase-python',
     version=coinbase.wallet.__version__,
     packages=['coinbase', 'coinbase.wallet'],
     include_package_data=True,
