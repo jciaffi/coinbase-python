@@ -53,3 +53,5 @@ coverage.xml
 *.swp
 # Sphinx documentation
 docs/_build/
+
+mon_fichier_de_test.py 

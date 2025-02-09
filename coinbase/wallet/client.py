@@ -10,6 +10,7 @@ import os
 import requests
 import six
 import warnings
+from urllib.parse import urlsplit
 
 from coinbase.wallet.auth import HMACAuth
 from coinbase.wallet.auth import OAuth2Auth
@@ -36,6 +37,7 @@ from coinbase.wallet.model import Withdrawal
 from coinbase.wallet.model import new_api_object
 from coinbase.wallet.util import check_uri_security
 from coinbase.wallet.util import encode_params
+from coinbase.jwt_generator import build_rest_jwt, format_jwt_uri
 
 from Crypto.Hash import SHA256
 from Crypto.PublicKey import RSA
@@ -78,11 +80,18 @@ class Client(object):
 
         # Allow passing in a different API base.
         self.BASE_API_URI = check_uri_security(base_api_uri or self.BASE_API_URI)
-
         self.API_VERSION = api_version or self.API_VERSION
-
-        # Set up a requests session for interacting with the API.
-        self.session = self._build_session(HMACAuth, api_key, api_secret, self.API_VERSION)
+        
+        self.api_key = api_key
+        self.api_secret = api_secret
+        
+        # Set up a requests session for interacting with the API
+        self.session = requests.session()
+        self.session.headers.update({
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'coinbase/python/2.0'
+        })
 
     def _build_session(self, auth_class, *args, **kwargs):
         """Internal helper for creating a requests `session` with the correct
@@ -107,14 +116,28 @@ class Client(object):
         response object. Not intended for direct use by API consumers.
         """
         uri = self._create_api_uri(*relative_path_parts)
+        request_path = urlsplit(uri).path
+        
+        # Generate JWT token
+        jwt_uri = format_jwt_uri(method, request_path)
+        jwt_token = build_rest_jwt(jwt_uri, self.api_key, self.api_secret)
+        
+        # Set authorization header
+        self.session.headers['Authorization'] = f'Bearer {jwt_token}'
+        
+        # Handle request data
         data = kwargs.get('data', None)
         if data and isinstance(data, dict):
             kwargs['data'] = encode_params(data)
+        
+        # Handle SSL verification
         if self.VERIFY_SSL:
             kwargs.setdefault('verify', COINBASE_CRT_PATH)
         else:
             kwargs.setdefault('verify', False)
         kwargs.update(verify=self.VERIFY_SSL)
+        
+        # Make the request
         response = getattr(self.session, method)(uri, **kwargs)
         return self._handle_response(response)
 
